@@ -1,0 +1,42 @@
+{% extends "base.html" %}{% block content %}
+<div class="grid module-7"><section class="panel panel--primary"><div class="panel__head"><h2>归档批次与容量</h2><span class="panel__meta">M7 · 四态回读</span></div><div class="panel__body panel__body--scroll">
+<table class="ledger"><thead><tr><th>批次</th><th>状态</th><th>原件字节</th><th>已校验行</th><th>冷件字节</th><th>错误码</th></tr></thead><tbody>
+{% for b in data.batches %}<tr><td>{{ b.batch_id }}</td><td>{{ b.state }}</td><td class="num">{{ b.hot_bytes }}</td><td class="num">{{ b.verified_lines }}/{{ b.line_count }}</td><td class="num">{{ b.cold_bytes }}</td><td>{{ b.error_code or 'OK' }}</td></tr>{% else %}<tr><td colspan="6">暂无批次</td></tr>{% endfor %}
+</tbody></table>
+<table class="ledger" style="margin-top:12px"><thead><tr><th>口径</th><th>热（在线原件）</th><th>冷（归档文件）</th></tr></thead><tbody>
+<tr><td>已用字节</td><td class="num">{{ data.status.hot_used_bytes }}</td><td class="num">{{ data.status.cold_used_bytes }}</td></tr>
+<tr><td>限额字节</td><td class="num">{{ data.status.hot_quota_bytes }}</td><td class="num">{{ data.status.cold_quota_bytes }}</td></tr>
+<tr><td>剩余字节</td><td class="num">{{ data.status.hot_free_bytes }}</td><td class="num">{{ data.status.cold_free_bytes }}</td></tr>
+<tr><td>待迁移/迁移中/已归档/失败（批次数）</td><td class="num" colspan="2">{{ data.status.states.HOT.batches }} / {{ data.status.states.MIGRATING.batches }} / {{ data.status.states.ARCHIVED.batches }} / {{ data.status.states.FAILED.batches }}</td></tr>
+</tbody></table></div></section>
+<div class="stack"><section class="panel"><div class="panel__head"><h2>本次动作</h2><span class="panel__meta">/api/archive/*</span></div><div class="panel__body">
+<label>批次编号 <input id="batch_id" value="batch-demo" style="width:100%"></label>
+<label>原件文本（JSONL，物理行号保留）<textarea id="batch_text" rows="6" style="width:100%">{"request_id":"a1","timestamp":"2026-11-15T01:05:00Z","service":"pay","status":200}
+{"request_id":"a2","timestamp":"2026-11-15T01:59:00Z","service":"pay","status":500}
+{"request_id":"a3","timestamp":"2026-11-15T02:05:00Z","service":"pay","status":200}</textarea></label>
+<div style="display:flex;flex-wrap:wrap;gap:6px;margin:8px 0">
+<button class="btn btn--primary" data-act="ingest">接入热库</button>
+<button class="btn" data-act="migrate">迁出冷归档</button>
+<button class="btn" data-act="readback">回读原件</button>
+<button class="btn" data-act="verify">校验冷件</button>
+<button class="btn" data-act="rebuild">复算原桶</button>
+<button class="btn" data-act="status">容量状态</button>
+</div><pre class="result" id="arc_result">等待运行</pre></div></section></div></div>
+<script>
+document.querySelectorAll("[data-act]").forEach(btn=>btn.addEventListener("click",async()=>{
+  const out=document.getElementById("arc_result"); out.textContent="运行中";
+  const bid=document.getElementById("batch_id").value.trim();
+  const text=document.getElementById("batch_text").value;
+  const body={batch_id:bid,text:text,source_name:"web"};
+  const map={ingest:["/api/archive/ingest",body],migrate:["/api/archive/migrate",{batch_id:bid}],
+    readback:["/api/archive/readback",{batch_id:bid}],verify:["/api/archive/verify",{batch_id:bid}],
+    rebuild:["/api/archive/rebuild-buckets",{batch_id:bid}]};
+  try{
+    if(btn.dataset.act==="status"){const r=await fetch("/api/archive/status");out.textContent=JSON.stringify(await r.json(),null,2);return;}
+    const [url,payload]=map[btn.dataset.act];
+    const r=await fetch(url,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});
+    out.textContent=JSON.stringify(await r.json(),null,2);
+  }catch(e){out.textContent="请求失败，请重试";}
+}));
+</script>
+{% endblock %}
